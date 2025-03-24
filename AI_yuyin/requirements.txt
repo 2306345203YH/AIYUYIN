@@ -1,0 +1,10 @@
+cffi==1.17.1
+Flask==3.1.0
+keyboard==0.13.5
+ollama==0.4.7
+PyAudio==0.2.14
+pyttsx3==2.98
+Requests==2.32.3
+srt==3.5.3
+tqdm==4.67.1
+websockets==11.0.3
