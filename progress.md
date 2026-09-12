@@ -1,0 +1,74 @@
+# 进度日志
+
+## 2026-07-23
+
+- 已读取项目根目录并确认没有既有规划文件。
+- 已创建本次任务的规划、调查和进度文件。
+- 下一步：读取入口脚本、配置和依赖声明。
+- 已确认项目包含对话助手、GPT-SoVITS 特定音色合成、旧 VITS 三条链路；发现 GPT-SoVITS 运行所需的 `feature_extractor` 与 `tools` 源码目录缺失。
+- 已检查本机：Python 3.13.13、RTX 2080 Ti 11GB、NVIDIA 驱动支持 CUDA 13.0；当前环境没有安装核心 PyTorch/Transformers 等包。
+- 已创建 `.venv` 并安装对话助手、音频、文本处理、Transformers、PyTorch CPU、Lightning 等依赖。
+- 已补齐缺失的 GPT-SoVITS 兼容模块并修复若干确定性兼容错误。
+- 已完成真实特定音色推理验证：`gpt-tts_11.py` 生成 `output.wav`，32kHz WAV 可被 soundfile 读取。
+- 未完成项：GPU CUDA 版 PyTorch 下载受网络重置影响；Ollama 未安装/未启动；系统无可用麦克风输入设备。
+
+## 2026-08-21
+
+- 开始项目精简任务；功能保留边界为 Vosk 识别、Ollama 对话、GPT-SoVITS 指定音色推理和历史 VITS 训练资产。
+- 删除策略：缓存/完全重复/生成物可删除；独有历史代码先归档并保留可恢复备份。
+- 已完成 SHA-256 重复检查与脚本相似度分析。
+- 已移动 25 个目录和 41 个文件：活跃入口归入 `app`，核心源码归入 `src`，模型归入 `models`，数据归入 `data`，历史内容归入 `legacy`。
+- 已建立 `config/voices.yaml`，统一配置 aiyafala/changli 两套音色。
+- 已重写三个活跃入口和 PowerShell 启动脚本，路径均基于项目根目录解析。
+- 活跃代码已通过 `compileall`；两个 CLI 帮助和 Flask `/health` 测试通过。
+- 已删除约 2.85GB 完全重复模型、源码副本、缓存和可重建中间音频；保留副本均经过 SHA-256 验证。
+- 已完成 `README.md`、命名规范、清理报告和历史工程说明。
+- 已从 `app` 目录分别运行 aiyafala、changli 两个音色，均生成 32kHz 标准 WAV。
+- 已加载 Vosk 中文小模型；Flask `/health` 返回 200；当前入口和历史 VITS 源码均通过编译检查。
+- 已删除回归测试音频和 27 个 `__pycache__` 目录；最终 `outputs/generated` 仅保留占位文件。
+- 已修正底层 GPT-SoVITS 默认配置中的旧目录名，并验证从任意工作目录加载时四项模型路径均存在。
+- 已确认本机 `Ollama` 未安装、系统 `PATH` 中没有 FFmpeg；二者的手动安装与验证方式已写入 `README.md`。
+- 项目精简任务完成。
+- 用户决定以后使用其他训练工程；已永久删除 `legacy/vits` 和依赖它的旧推理脚本，释放约 1.62GB。
+- 已同步更新主 README、历史归档说明和清理报告；当前 GPT-SoVITS 推理、角色模型、数据与原始视频均保留。
+- 发现两个早期 Vosk 数据切分脚本仍引用已删除的 `vits-main`，已改为当前 `data`、`models` 和 `outputs` 目录。
+- 已把其余历史脚本中的 `mp4flie`、`vosk-model-cn` 旧路径统一替换为当前规范路径。
+- 删除旧 VITS 后重新执行 aiyafala 推理，成功生成并读取 32000Hz/1.66s WAV；测试音频和缓存随后已清除。
+- 开始视频语音识别与数据切分优化：计划安装处理依赖、统一历史脚本，并使用真实视频做端到端测试。
+- 已通过 WinGet 安装 FFmpeg/FFprobe 9.0，并在 `.venv` 安装 MoviePy、OpenAI Whisper、Pydub 及其依赖。
+- 当前 PyTorch 仍为 2.13.0 CPU 版；新入口将自动检测 CUDA 并在不可用时回退 CPU，避免破坏已验证的 GPT-SoVITS 环境。
+- Vosk 已在 `changli.mp4` 前 30 秒完成端到端测试，生成 4 个 16kHz 单声道 PCM 片段及三种清单。
+- Whisper 首测暴露 WinGet 安装后当前进程 PATH 未刷新的问题，已改为在代码内自动注入 FFmpeg 所在目录。
+- 已新增统一入口 `app/prepare_voice_dataset.py` 和 PowerShell 启动脚本，支持 Whisper/Vosk、局部视频、时长规则、覆盖保护和结构化清单。
+- 3 项自动化测试通过；Whisper 在 `changli.mp4` 的 10 秒真实片段上完成 CPU 端到端识别并生成 8 个有效 WAV。
+- 已更新主依赖清单、README、命名规范和视频数据集处理专用文档。
+- Vosk 与 Whisper 两套真实视频测试的片段数、格式、清单和时间戳均验证通过；两套测试目录及 3 个缓存目录已删除。
+- 已从 PyTorch 官方 CUDA 12.6 索引安装 `torch 2.13.0+cu126`，RTX 2080 Ti、CUDA 计算和 `pip check` 均验证通过。
+- Whisper 自动选择 CUDA，同一 10 秒片段核心解码约 11 秒；GPT-SoVITS 在 CUDA 环境下成功生成回归测试 WAV。
+- 已新增 `requirements-cuda.txt` 并更新迁移与性能说明。
+- 最终 3 项单元测试、媒体格式、CUDA 设备和依赖一致性复核全部通过；GPU 数据集、TTS 回归音频和缓存均已清除。
+- 开始本地多模态语音聊天网页方案设计：本轮只做架构审计和官方仓库调研，不改动现有运行代码。
+- 已完成 GPT-SoVITS、CosyVoice3、IndexTTS2、Qwen3-TTS、Chatterbox V3、Fish Audio S2 Pro、F5-TTS 的官方仓库对比。
+- 推荐采用 React/Vite + FastAPI + llama.cpp + faster-whisper，并以 Provider 接口和单 GPU 队列整合现有功能。
+- 已确定先用 aiyafala/changli 跑通网页，再以 CosyVoice3 为首选替换候选、IndexTTS2 为情绪质量对照。
+- 已输出 `docs/web_voice_chat_plan.md`；本轮没有改动现有可运行入口和模型文件。
+- 用户新增多人模拟聊天、角色独立命名、角色分别绑定 LLM/TTS、外部 API Key 和持久化定时任务需求。
+- 已开始扩展方案；确认使用角色档案作为绑定中心，API Key 由 Windows Credential Locker 保存，定时任务由后端持久化调度而非浏览器计时。
+- 已完成多人角色的数据关系、三种回复模式、逐消息音色绑定、外部 API 设置和定时任务行为设计。
+- 已更新 `docs/web_voice_chat_plan.md`，新增角色档案、OpenAI 兼容连接、Credential Locker、APScheduler、浏览器自动播放限制和多角色验收标准。
+- 已安装网页第一版依赖：FastAPI、Uvicorn、APScheduler、aiosqlite、keyring、httpx、OpenAI SDK、wordsegment 和 NLTK。
+- 已新增 `app/web_app.py`、`scripts/run_web_chat.ps1` 和 `web/` React/Vite 前端；前端生产构建通过。
+- 已实现角色、会话、消息、模型连接、API Key 引用、语音合成、Vosk 录音识别、定时任务及会话清空接口。
+- 已用浏览器检查聊天主界面、角色设置、AI 服务设置和定时任务设置；页面布局和控件均可见可操作。
+- 已用网页接口完成 aiyafala 与 changli 两套 GPT-SoVITS 音色真实 WAV 合成，均通过 HTTP 音频读取和 SoundFile 格式检查。
+- 首次音色回归补装了 `wordsegment` 和 NLTK `averaged_perceptron_tagger_eng` 资源；新增依赖和新电脑安装命令已写入 README。
+- 测试结束后通过后端清空会话接口删除了本轮生成的测试消息和两个 WAV 文件；默认会话恢复为空白状态。
+- 第一版前端已完成 Vite 构建；FastAPI `/api/health`、默认角色/会话加载、SSE 流式演示回复和定时任务增删测试通过。
+- 首次通过网页调用 GPT-SoVITS 时发现缺少 `wordsegment`，已补装并下载 NLTK 资源；aiyafala 与 changli 均已完成真实 WAV 回归。
+- 最终复核通过：`pip check`、后端语法检查、前端 `npm run build`、网页健康接口和默认数据加载均成功；测试音频已清理，网页后端当前运行于 `127.0.0.1:8000`。
+- 修复 API Key 绑定后仍返回演示模式的问题：原“演示模式”连接被编辑后仍保留 `mock` 类型，后端因此跳过了真实 API；现已按 Base URL 自动迁移为 OpenAI 兼容连接。
+- 使用当前保存的 Key 验证 `https://www.yyapi.cloud/v1/models`，确认可用模型为 `grok-4.5`、`grok-4.6`；将错误填写的 `GORK` 模型改为 `grok-4.6` 后，真实 SSE 对话返回 `OK`，测试消息和音频已清理。
+- 增强网页错误提示，避免 API 调用失败后被“对话完成”覆盖；设置页和 README 已明确区分服务名称与模型 ID。
+- 修复长对话撑高整个页面：应用锁定 `100dvh`，工作区和聊天列允许收缩，只有 `.message-scroller` 独立纵向滚动；桌面 1280×720 和手机 390×844 均验证页面高度不再增长、输入框固定在视口底部。
+- 修复多人模式：切换“依次对话/独立回答”会自动选择会话全部角色；依次对话把其他角色历史作为外部说话者，独立回答排除本轮其他角色结果。
+- 新增 `浏览器中文语音 · 免费免 Key` 音色配置，作为无 GPU、无法运行 GPT-SoVITS 时的免费降级方案；新增 OpenRouter、Groq、Gemini 免费层设置模板，并修复 Gemini OpenAI 兼容地址拼接。

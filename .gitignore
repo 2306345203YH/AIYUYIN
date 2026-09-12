@@ -1,0 +1,43 @@
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*.spec.pt
+.pytest_cache/
+
+# Local virtualenv & portable runtime (bundled Python + ffmpeg, ~6GB)
+.venv/
+runtime/
+
+# Model weights - never commit (download sources: docs/model_guide.md)
+models/*
+!models/README.md
+src/gpt_sovits/text/G2PWModel/g2pW.onnx
+*.ckpt
+*.pth
+*.pt
+*.onnx
+
+# Data: raw videos, voice datasets, processed output, personal chat database
+data/raw/*
+!data/raw/.gitkeep
+data/voices/*
+!data/voices/.gitkeep
+data/processed/
+data/chat/
+legacy/datasets/
+
+# Web frontend build deps (web/dist IS tracked: needed to run without node)
+web/node_modules/
+web/tsconfig.tsbuildinfo
+
+# Outputs & local runtime state
+outputs/generated/*
+!outputs/generated/.gitkeep
+outputs/dataset_smoke_*/
+
+config/tts_runtime.yaml
+*.log
+
+# Personal chat-generated audio & db
+data/chat/
+outputs/chat/

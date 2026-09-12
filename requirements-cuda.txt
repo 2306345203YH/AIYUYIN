@@ -1,0 +1,3 @@
+# Install after requirements.txt on an NVIDIA Windows computer.
+--index-url https://download.pytorch.org/whl/cu126
+torch==2.13.0+cu126

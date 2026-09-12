@@ -1,0 +1,58 @@
+# Runtime: Python 3.13 on Windows (verified 2026-08-21)
+Flask==3.1.0
+keyboard==0.13.5
+ollama==0.4.7
+PyAudio==0.2.14
+pyttsx3==2.98
+Requests==2.32.3
+srt==3.5.3
+tqdm==4.67.1
+websockets==17.0.1
+
+# First-version local voice chat web application
+fastapi==0.141.1
+uvicorn==0.52.4
+python-multipart==0.0.32
+APScheduler==3.11.3
+aiosqlite==0.22.1
+keyring==25.7.0
+httpx==0.28.1
+openai==3.3.1
+
+# Video speech recognition and dataset preparation
+moviepy==2.2.1
+openai-whisper==20250625
+pydub==0.25.1
+imageio==2.37.4
+tiktoken==0.14.0
+Pillow==11.3.0
+
+# GPT-SoVITS inference
+torch==2.13.0
+pytorch-lightning==2.6.5
+transformers==5.14.1
+numpy==2.4.6
+scipy==1.18.0
+librosa==0.11.0
+soundfile==0.14.0
+PyYAML==6.0.3
+ffmpeg-python==0.2.0
+imageio-ffmpeg==0.6.0
+pandas==3.0.5
+einops==0.8.2
+safetensors==0.8.0
+onnxruntime==1.27.0
+matplotlib==3.10.8
+
+# Chinese and multilingual text processing
+jieba==0.42.1
+cn2an==0.5.24
+pypinyin==0.55.0
+g2p-en==2.1.0
+g2pM==0.1.2.5
+opencc-python-reimplemented==0.1.7
+g2pk2==0.0.3
+fast-langdetect==1.0.1
+split-lang==2.1.1
+wordsegment==1.3.1
+nltk==3.10.0

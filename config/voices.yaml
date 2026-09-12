@@ -1,0 +1,16 @@
+voices:
+  aiyafala:
+    gpt_model: models/voices/aiyafala/aiyafala.ckpt
+    sovits_model: models/voices/aiyafala/aiyafala.pth
+    bert_model: models/gpt_sovits/chinese-roberta-wwm-ext-large
+    cnhubert_model: models/gpt_sovits/chinese-hubert-base
+    reference_audio: data/voices/aiyafala/aiyafala_021.wav
+    prompt_text: 野餐就要开始啦。
+
+  changli:
+    gpt_model: models/voices/changli/changli.ckpt
+    sovits_model: models/voices/changli/changli.pth
+    bert_model: models/gpt_sovits/chinese-roberta-wwm-ext-large
+    cnhubert_model: models/gpt_sovits/chinese-hubert-base
+    reference_audio: data/voices/changli/changli_004.wav
+    prompt_text: 而我只是一个有幸接过游丝的引路人，是助你串联起过去与未来的契机。

@@ -1,0 +1,8 @@
+# Historical video/audio dataset preparation scripts only.
+# Install in a separate environment when these archived scripts are needed.
+moviepy
+openai-whisper
+pydub
+opencc-python-reimplemented
+vosk
+
