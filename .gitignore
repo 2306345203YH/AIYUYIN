@@ -41,3 +41,7 @@ config/tts_runtime.yaml
 # Personal chat-generated audio & db
 data/chat/
 outputs/chat/
+
+# CosyVoice3 A/B test env (repo clone, py3.11 venv, 5.1GB model)
+third_party/
+outputs/ab_test/

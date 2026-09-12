@@ -60,6 +60,17 @@ GPT-SoVITS 是音色克隆的底层引擎，由四个部分组成，缺一不可
 
 低配置电脑可不放任何模型：网页聊天选择「浏览器中文语音 · 免费免 Key」音色（系统 TTS），LLM 接在线 API，Vosk 小模型仅 40MB 可选装。此时整个项目不需要 NVIDIA 显卡。
 
+### 2.5 备选音色引擎：Fun-CosyVoice3-0.5B（已实测）
+
+2026-09 已完成 CosyVoice3 零样本克隆 A/B 测试（`third_party/test_cosyvoice3.py`，环境与模型不入库）：
+
+- 模型：ModelScope `FunAudioLLM/Fun-CosyVoice3-0.5B-2512`，选择性下载约 5.1GB；
+- 依赖：独立 Python 3.11 venv（官方锁旧版 torch/transformers，与主环境冲突，不能混装）；
+- **关键坑**：CosyVoice3 要求提示文本带指令格式 `You are a helpful assistant.<|endofprompt|>参考音频文本`，缺失会导致 LLM 生成坍缩并在声码器报 "Kernel size can't be greater than actual input size"；
+- 性能：RTX 2080 Ti 上 RTF 约 1.6–1.8（慢于实时），模型加载约 20s；GPT-SoVITS 微调音色 RTF 约 0.5；
+- 输出：24kHz（GPT-SoVITS 为 32kHz），float32 WAV 需转 16-bit PCM 再入库播放；
+- 结论：零样本开箱即用、情绪自然，适合新角色快速试音；已微调的老角色仍以 GPT-SoVITS 相似度为准。正式接入需按 plan 文档实现 TTSProvider 适配器。
+
 ## 3. 克隆仓库后的准备清单
 
 按想用的功能对号入座，从上往下累加：
