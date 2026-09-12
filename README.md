@@ -110,7 +110,7 @@ cd D:\AIyuyin
 .\scripts\run_web_chat.ps1
 ```
 
-然后打开 `http://127.0.0.1:8000`。如果网页代码发生变化，需要强制重新构建时执行：
+然后打开启动窗口提示的地址（默认 `http://127.0.0.1:8000`，端口被占用时自动顺延）。如果网页代码发生变化，需要强制重新构建时执行：
 
 ```powershell
 .\scripts\run_web_chat.ps1 -Build
