@@ -36,6 +36,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_ROOT = PROJECT_ROOT / "data" / "chat"
 OUTPUT_ROOT = PROJECT_ROOT / "outputs"
 CHAT_OUTPUT_ROOT = OUTPUT_ROOT / "chat"
+MMD_ROOT = PROJECT_ROOT / "data" / "mmd"
 DB_PATH = DATA_ROOT / "chat.db"
 VOICE_CONFIG_PATH = PROJECT_ROOT / "config" / "voices.yaml"
 WEB_DIST = PROJECT_ROOT / "web" / "dist"
@@ -110,6 +111,7 @@ def init_database() -> None:
             llm_model TEXT NOT NULL DEFAULT '',
             voice_profile_id TEXT NOT NULL,
             default_emotion TEXT NOT NULL DEFAULT 'auto',
+            mmd_model TEXT NOT NULL DEFAULT '',
             enabled INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL,
             FOREIGN KEY (llm_connection_id) REFERENCES llm_connections(id),
@@ -189,6 +191,15 @@ def init_database() -> None:
         connection.execute(
             "ALTER TABLE messages ADD COLUMN error_message TEXT NOT NULL DEFAULT ''"
         )
+    character_columns = {
+        str(row["name"])
+        for row in connection.execute("PRAGMA table_info(characters)").fetchall()
+    }
+    if "mmd_model" not in character_columns:
+        connection.execute("ALTER TABLE characters ADD COLUMN mmd_model TEXT NOT NULL DEFAULT ''")
+    connection.execute(
+        "UPDATE characters SET mmd_model = 'yanhe_kabashiki' WHERE id = 'aiyafala' AND TRIM(mmd_model) = ''"
+    )
     seed_defaults(connection)
     # The seeded demo connection can be edited from the UI. If it now has a
     # real Base URL, migrate it to an OpenAI-compatible connection instead of
@@ -788,6 +799,7 @@ class CharacterInput(BaseModel):
     llm_model: str = ""
     voice_profile_id: str = "aiyafala"
     default_emotion: str = "auto"
+    mmd_model: str = ""
 
 
 class ConversationInput(BaseModel):
@@ -857,6 +869,51 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="AIyuyin Voice Chat", version="0.1.0", lifespan=lifespan)
 app.mount("/media", StaticFiles(directory=str(OUTPUT_ROOT)), name="media")
+MMD_ROOT.mkdir(parents=True, exist_ok=True)
+(MMD_ROOT / "models").mkdir(exist_ok=True)
+(MMD_ROOT / "motions").mkdir(exist_ok=True)
+app.mount("/mmd", StaticFiles(directory=str(MMD_ROOT)), name="mmd")
+
+
+@app.get("/api/mmd/models")
+async def list_mmd_models() -> list[dict[str, Any]]:
+    """Scan data/mmd/models/*/ for PMD/PMX models usable by the web stage."""
+    models: list[dict[str, Any]] = []
+    models_dir = MMD_ROOT / "models"
+    if models_dir.exists():
+        for directory in sorted(models_dir.iterdir()):
+            if not directory.is_dir():
+                continue
+            model_file = next(
+                (path for pattern in ("*.pmx", "*.pmd") for path in directory.glob(pattern)),
+                None,
+            )
+            if model_file is None:
+                continue
+            thumb = next(
+                (path for pattern in ("thumb.jpg", "thumb.png") for path in directory.glob(pattern)),
+                None,
+            )
+            relative = model_file.relative_to(MMD_ROOT).as_posix()
+            models.append(
+                {
+                    "id": directory.name,
+                    "name": directory.name,
+                    "file": f"/mmd/{relative}",
+                    "thumb": f"/mmd/{thumb.relative_to(MMD_ROOT).as_posix()}" if thumb else "",
+                }
+            )
+    return models
+
+
+@app.get("/api/mmd/motions")
+async def list_mmd_motions() -> list[dict[str, Any]]:
+    """Scan the optional VMD library; M1 uses procedural idle animation."""
+    motions: list[dict[str, Any]] = []
+    motions_dir = MMD_ROOT / "motions"
+    for path in sorted(motions_dir.rglob("*.vmd")):
+        motions.append({"id": path.stem, "name": path.stem, "file": f"/mmd/{path.relative_to(MMD_ROOT).as_posix()}"})
+    return motions
 
 
 @app.get("/api/health")
@@ -1032,10 +1089,10 @@ async def create_character(payload: CharacterInput) -> dict[str, Any]:
         """
         INSERT INTO characters
         (id, name, avatar, color, system_prompt, llm_connection_id, llm_model,
-         voice_profile_id, default_emotion, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         voice_profile_id, default_emotion, mmd_model, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (character_id, payload.name, payload.avatar, payload.color, payload.system_prompt, payload.llm_connection_id, payload.llm_model, payload.voice_profile_id, payload.default_emotion, now),
+        (character_id, payload.name, payload.avatar, payload.color, payload.system_prompt, payload.llm_connection_id, payload.llm_model, payload.voice_profile_id, payload.default_emotion, payload.mmd_model, now),
     )
     connection.commit()
     connection.close()
@@ -1050,10 +1107,10 @@ async def update_character(character_id: str, payload: CharacterInput) -> dict[s
     connection.execute(
         """
         UPDATE characters SET name = ?, avatar = ?, color = ?, system_prompt = ?,
-        llm_connection_id = ?, llm_model = ?, voice_profile_id = ?, default_emotion = ?
+        llm_connection_id = ?, llm_model = ?, voice_profile_id = ?, default_emotion = ?, mmd_model = ?
         WHERE id = ?
         """,
-        (payload.name, payload.avatar, payload.color, payload.system_prompt, payload.llm_connection_id, payload.llm_model, payload.voice_profile_id, payload.default_emotion, character_id),
+        (payload.name, payload.avatar, payload.color, payload.system_prompt, payload.llm_connection_id, payload.llm_model, payload.voice_profile_id, payload.default_emotion, payload.mmd_model, character_id),
     )
     connection.commit()
     connection.close()

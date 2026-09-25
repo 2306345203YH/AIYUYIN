@@ -45,3 +45,10 @@ outputs/chat/
 # CosyVoice3 A/B test env (repo clone, py3.11 venv, 5.1GB model)
 third_party/
 outputs/ab_test/
+
+# MMD models & motions (user-imported, respect original author terms)
+data/mmd/models/
+data/mmd/motions/
+!data/mmd/.gitkeep
+# Extracted game reference assets
+outputs/game_ref/

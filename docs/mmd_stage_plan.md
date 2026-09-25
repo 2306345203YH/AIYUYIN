@@ -100,7 +100,21 @@ SPEAKING（口型实时驱动 + 情绪手势: motion_map[emotion].vmd 播一次�
   - 发消息响应/`GET messages` 附带 emotion 字段。
 - `data/mmd/`、`data/mmd/**` 加入 `.gitignore`（`data/raw` 同款模式 + .gitkeep）。
 
-## 7. 分期实施
+## 7. 当前实现进度
+
+2026-09-14 已完成 M1 的第一版实现：
+
+- 网页按需加载 Three.js MMD 舞台，模型文件通过 `/mmd/` 静态路径提供；
+- `椛暗式-言和ver1.0` 已放入 `data/mmd/models/yanhe_kabashiki/`，艾雅法拉默认绑定该模型；
+- 角色设置增加舞台模型选择；
+- 右侧舞台增加全局显示开关，并保存到浏览器本地设置；
+- 已加入待机轻微呼吸、眨眼和播放语音时的基础张嘴口型；
+- 后端增加 `/api/mmd/models` 和 `/api/mmd/motions` 接口；
+- 依赖锁定为 `three` + `three-stdlib`，MMD 代码通过动态 import 延迟加载。
+
+当前仍未加入 VMD 手势动作和逐词口型。`motions/` 目录可以直接放入后续动作文件。
+
+## 8. 分期实施
 
 | 阶段 | 内容 | 验收标准 |
 |---|---|---|
@@ -108,7 +122,7 @@ SPEAKING（口型实时驱动 + 情绪手势: motion_map[emotion].vmd 播一次�
 | **M2** | 8 个内置 VMD 动作库、规则情绪判定、动作 crossfade、说话角色切换 | 不同情绪的回复触发不同手势，动作衔接无跳变 |
 | **M3** | LLM 情绪标注、离线口型对齐、动作映射编辑（角色档案里拖拽分配） | 长文本情绪起伏时动作随之变化；口型与语音逐词对齐 |
 
-## 8. 风险与对策
+## 9. 风险与对策
 
 - **three 版本兼容**：MMDLoader 位于 examples addons，API 随版本变动，package.json 锁死版本；
 - **PMX 贴图路径大小写/中文**：Windows 开发正常、部署到其他系统会断链——加载器内做路径规范化；中文模型名统一转拼音/英文目录名（沿用项目命名规范）；

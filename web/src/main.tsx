@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
+import { audioBus } from "./audioBus";
+import type { MMDModel } from "./MMDStage";
+
+const MMDStage = lazy(() => import("./MMDStage"));
 
 type Character = {
   id: string;
@@ -18,6 +22,7 @@ type Character = {
   voice_provider: string;
   voice_key: string;
   default_emotion: string;
+  mmd_model: string;
   has_api_key: boolean;
 };
 
@@ -109,6 +114,7 @@ function App() {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [voices, setVoices] = useState<VoiceProfile[]>([]);
+  const [mmdModels, setMmdModels] = useState<MMDModel[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [conversationId, setConversationId] = useState("");
@@ -124,6 +130,9 @@ function App() {
   const [notice, setNotice] = useState("欢迎来到角色会客厅");
   const [autoPlay, setAutoPlay] = useState(true);
   const [audioLoading, setAudioLoading] = useState<string[]>([]);
+  const [stageSpeaking, setStageSpeaking] = useState(false);
+  const [stageAudioUrl, setStageAudioUrl] = useState("");
+  const [stageEnabled, setStageEnabled] = useState(() => localStorage.getItem("aiyuyin.mmd.enabled") !== "false");
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -136,19 +145,20 @@ function App() {
   }, []);
 
   const refreshBootstrap = useCallback(async () => {
-    const data = await requestJson<{
+    const [data, models] = await Promise.all([requestJson<{
       characters: Character[];
       connections: Connection[];
       voices: VoiceProfile[];
       conversations: Conversation[];
       schedules: Schedule[];
       default_conversation_id: string;
-    }>("/api/bootstrap");
+    }>("/api/bootstrap"), requestJson<MMDModel[]>("/api/mmd/models")]);
     setCharacters(data.characters);
     setConnections(data.connections);
     setVoices(data.voices);
     setConversations(data.conversations);
     setSchedules(data.schedules);
+    setMmdModels(models);
     setConversationId((current) => current || data.default_conversation_id);
   }, []);
 
@@ -195,8 +205,12 @@ function App() {
   function playAudioInOrder(url: string) {
     enqueuePlayback(() => new Promise<void>((resolve) => {
       const audio = new Audio(url);
-      audio.addEventListener("ended", () => resolve(), { once: true });
-      audio.addEventListener("error", () => resolve(), { once: true });
+      setStageAudioUrl(url);
+      setStageSpeaking(true);
+      audio.addEventListener("play", () => audioBus.attach(audio), { once: true });
+      audio.addEventListener("ended", () => { audioBus.detach(audio); resolve(); }, { once: true });
+      audio.addEventListener("ended", () => setStageSpeaking(false), { once: true });
+      audio.addEventListener("error", () => { audioBus.detach(audio); setStageSpeaking(false); resolve(); }, { once: true });
       audio.play().catch(() => {
         setNotice("浏览器阻止了自动播放，请点击消息上的播放按钮。");
         resolve();
@@ -210,8 +224,10 @@ function App() {
       utterance.lang = lang || "zh-CN";
       const matchingVoice = window.speechSynthesis.getVoices().find((voice) => voice.lang.toLowerCase().startsWith(utterance.lang.toLowerCase().slice(0, 2)));
       if (matchingVoice) utterance.voice = matchingVoice;
+      setStageSpeaking(true);
       utterance.addEventListener("end", () => resolve(), { once: true });
-      utterance.addEventListener("error", () => resolve(), { once: true });
+      utterance.addEventListener("end", () => setStageSpeaking(false), { once: true });
+      utterance.addEventListener("error", () => { setStageSpeaking(false); resolve(); }, { once: true });
       window.speechSynthesis.speak(utterance);
     }));
   }
@@ -464,6 +480,10 @@ function App() {
         </main>
 
         <aside className="role-rail">
+          <div className="mmd-stage-card">
+            <div className="rail-heading"><span>角色舞台</span><label className="stage-toggle"><input type="checkbox" checked={stageEnabled} onChange={(event) => { const value = event.target.checked; setStageEnabled(value); localStorage.setItem("aiyuyin.mmd.enabled", String(value)); }} /><span>显示</span></label></div>
+            <Suspense fallback={<div className="mmd-stage mmd-stage-empty"><span>正在准备舞台…</span></div>}><MMDStage enabled={stageEnabled} speaking={stageSpeaking} audioUrl={stageAudioUrl} model={mmdModels.find((item) => item.id === activeCharacters[0]?.mmd_model)} /></Suspense>
+          </div>
           <div className="rail-heading"><span>本次会话角色</span><button className="icon-button small" onClick={() => { setSettingsOpen(true); setActiveTab("characters"); }}>＋</button></div>
           <div className="role-list">
             {characters.map((character) => <RoleCard key={character.id} character={character} active={selectedCharacterIds.includes(character.id)} onClick={() => toggleCharacter(character.id)} />)}
@@ -472,7 +492,7 @@ function App() {
         </aside>
       </div>
 
-      {settingsOpen && <SettingsPanel tab={activeTab} setTab={setActiveTab} characters={characters} setCharacters={setCharacters} connections={connections} setConnections={setConnections} voices={voices} schedules={schedules} setSchedules={setSchedules} conversations={conversations} onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && <SettingsPanel tab={activeTab} setTab={setActiveTab} characters={characters} setCharacters={setCharacters} connections={connections} setConnections={setConnections} voices={voices} mmdModels={mmdModels} schedules={schedules} setSchedules={setSchedules} conversations={conversations} onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }
@@ -504,7 +524,7 @@ function MessageBubble({ message, character, loading, onSynthesize }: { message:
   </article>;
 }
 
-function SettingsPanel({ tab, setTab, characters, setCharacters, connections, setConnections, voices, schedules, setSchedules, conversations, onClose }: {
+function SettingsPanel({ tab, setTab, characters, setCharacters, connections, setConnections, voices, mmdModels, schedules, setSchedules, conversations, onClose }: {
   tab: Tab;
   setTab: (tab: Tab) => void;
   characters: Character[];
@@ -512,6 +532,7 @@ function SettingsPanel({ tab, setTab, characters, setCharacters, connections, se
   connections: Connection[];
   setConnections: (value: Connection[]) => void;
   voices: VoiceProfile[];
+  mmdModels: MMDModel[];
   schedules: Schedule[];
   setSchedules: (value: Schedule[]) => void;
   conversations: Conversation[];
@@ -526,7 +547,7 @@ function SettingsPanel({ tab, setTab, characters, setCharacters, connections, se
         <button className={tab === "schedules" ? "active" : ""} onClick={() => setTab("schedules")}>定时任务</button>
       </nav>
       <div className="settings-content">
-        {tab === "characters" && <CharacterSettings characters={characters} setCharacters={setCharacters} connections={connections} voices={voices} />}
+        {tab === "characters" && <CharacterSettings characters={characters} setCharacters={setCharacters} connections={connections} voices={voices} mmdModels={mmdModels} />}
         {tab === "connections" && <ConnectionSettings connections={connections} setConnections={setConnections} />}
         {tab === "schedules" && <ScheduleSettings schedules={schedules} setSchedules={setSchedules} characters={characters} conversations={conversations} />}
       </div>
@@ -534,12 +555,12 @@ function SettingsPanel({ tab, setTab, characters, setCharacters, connections, se
   </div>;
 }
 
-function CharacterSettings({ characters, setCharacters, connections, voices }: { characters: Character[]; setCharacters: (value: Character[]) => void; connections: Connection[]; voices: VoiceProfile[] }) {
+function CharacterSettings({ characters, setCharacters, connections, voices, mmdModels }: { characters: Character[]; setCharacters: (value: Character[]) => void; connections: Connection[]; voices: VoiceProfile[]; mmdModels: MMDModel[] }) {
   const [selectedId, setSelectedId] = useState(characters[0]?.id || "");
   const selected = characters.find((item) => item.id === selectedId) || characters[0];
-  const [form, setForm] = useState({ name: "", avatar: "AI", color: "#b987f5", system_prompt: "", llm_connection_id: "demo", llm_model: "", voice_profile_id: "aiyafala", default_emotion: "auto" });
+  const [form, setForm] = useState({ name: "", avatar: "AI", color: "#b987f5", system_prompt: "", llm_connection_id: "demo", llm_model: "", voice_profile_id: "aiyafala", default_emotion: "auto", mmd_model: "" });
   useEffect(() => {
-    if (selected) setForm({ name: selected.name, avatar: selected.avatar, color: selected.color, system_prompt: selected.system_prompt, llm_connection_id: selected.llm_connection_id, llm_model: selected.llm_model, voice_profile_id: selected.voice_profile_id, default_emotion: selected.default_emotion });
+    if (selected) setForm({ name: selected.name, avatar: selected.avatar, color: selected.color, system_prompt: selected.system_prompt, llm_connection_id: selected.llm_connection_id, llm_model: selected.llm_model, voice_profile_id: selected.voice_profile_id, default_emotion: selected.default_emotion, mmd_model: selected.mmd_model || "" });
   }, [selected?.id]);
   if (!selected) return <EmptyState text="还没有角色" />;
   async function save() {
@@ -557,6 +578,8 @@ function CharacterSettings({ characters, setCharacters, connections, voices }: {
     <label>模型名（留空使用服务默认）<input value={form.llm_model} onChange={(event) => setForm({ ...form, llm_model: event.target.value })} placeholder="例如 deepseek-chat" /></label>
     <label>绑定音色<select value={form.voice_profile_id} onChange={(event) => setForm({ ...form, voice_profile_id: event.target.value })}>{voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name}</option>)}</select></label>
     <label>默认情绪<select value={form.default_emotion} onChange={(event) => setForm({ ...form, default_emotion: event.target.value })}>{emotionOptions.map((emotion) => <option key={emotion} value={emotion}>{emotion === "auto" ? "自动" : emotion}</option>)}</select></label>
+    <label>舞台模型<select value={form.mmd_model} onChange={(event) => setForm({ ...form, mmd_model: event.target.value })}><option value="">不显示模型</option>{mmdModels.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}</select></label>
+    <div className="security-note">M1 提供待机呼吸、眨眼和播放时的基础口型；VMD 手势动作将在下一阶段加入。</div>
     <label>人物设定<textarea rows={5} value={form.system_prompt} onChange={(event) => setForm({ ...form, system_prompt: event.target.value })} /></label>
     <button className="primary-wide" onClick={() => void save()}>保存角色配置</button>
   </div>;

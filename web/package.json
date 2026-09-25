@@ -9,13 +9,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "@types/three": "^0.186.0",
+    "@vitejs/plugin-react": "latest",
     "react": "latest",
     "react-dom": "latest",
+    "three": "^0.186.0",
+    "three-stdlib": "^2.36.1",
     "typescript": "latest",
     "vite": "latest"
-  },
-  "devDependencies": {}
+  }
 }
