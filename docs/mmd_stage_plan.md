@@ -1,5 +1,12 @@
 # MMD 舞台功能设计方案：对话驱动的角色模型动作
 
+> **实现状态（2026-09-14）：M1 已完成并实测通过。**
+> - 后端：`/api/mmd/models` 扫描接口 + `/mmd` 静态挂载 + `characters.mmd_model` 字段（艾雅法拉已默认绑定 `yanhe_kabashiki`，即椛暗式言和模型）；
+> - 前端：`MMDStage.tsx`（three.js 懒加载独立 chunk，自动取景/眨眼/脊椎摆动 idle）、`audioBus.ts`（WebAudio AnalyserNode 实时频谱 → 五元音口型 morph）、三层开关（角色绑定 / 右栏显示勾选 / localStorage `aiyuyin.mmd.enabled`）；
+> - 视觉：参考《Chill with You Lo-Fi Story》提取的 UI 资源重构为 lo-fi 夜景主题（星月背景、玻璃面板、暖橙渐变）；
+> - 已验证：模型渲染、对话→本地 qwen3→GPT-SoVITS 合成→自动播放→舞台口型同步全链路（浏览器实测）。
+> - M2（VMD 动作库 + 情绪触发 + crossfade）与 M3（LLM 情绪标注 + 离线口型对齐）待做，设计见下文。
+
 目标：在网页语音聊天中显示角色的 MMD 模型（.pmx），对话时有对应的行为动作（手势、表情、待机呼吸）和口型同步，功能**可控开启**（全局开关 + 角色级绑定）。
 
 ## 1. 总体架构
