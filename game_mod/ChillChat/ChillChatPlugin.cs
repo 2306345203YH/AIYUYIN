@@ -56,6 +56,8 @@ namespace ChillChat
         public ConfigEntry<string> TtsVoice;
         public ConfigEntry<bool> VisibleOnStart;
 
+        public ConfigEntry<string> CharacterName;
+
         public ChillSettings(ConfigFile file)
         {
             LlmBaseUrl = file.Bind("LLM", "BaseUrl", "http://127.0.0.1:11434/v1", "OpenAI 兼容 API 根地址，Ollama 填 http://127.0.0.1:11434/v1");
@@ -69,8 +71,9 @@ namespace ChillChat
             HistoryTurns = file.Bind("LLM", "HistoryTurns", 10, "携带的历史对话轮数");
             TtsEnabled = file.Bind("TTS", "Enabled", true, "是否用 AIyuyin GPT-SoVITS 音色朗读回复");
             TtsBaseUrl = file.Bind("TTS", "BaseUrl", "http://127.0.0.1:8000", "AIyuyin 网页服务地址（run_web_chat.bat 启动）");
-            TtsVoice = file.Bind("TTS", "Voice", "aiyafala", "config/voices.yaml 中的音色名：aiyafala / changli");
+            TtsVoice = file.Bind("TTS", "Voice", "alterego", "config/voices.yaml 中的音色名：alterego（游戏角色）/ aiyafala / changli");
             VisibleOnStart = file.Bind("UI", "VisibleOnStart", true, "游戏启动后自动显示聊天窗口");
+            CharacterName = file.Bind("UI", "CharacterName", "Alter Ego", "对话框上的角色名牌文字");
         }
     }
 
@@ -86,7 +89,7 @@ namespace ChillChat
         private bool _busy;
         private bool _visible = true;
         private Vector2 _scroll;
-        private Rect _windowRect = new Rect(0, 0, 430, 520);
+        private bool _logOpen;
         private AudioSource _voiceSource;
         private float _lastToggleAt;
         private bool _loggedFirstUpdate;
@@ -148,8 +151,8 @@ namespace ChillChat
                 ev.Use();
             }
             if (!_visible) return;
-            GUI.skin.window.fontSize = 13;
-            _windowRect = GUI.Window(0x4348, _windowRect, DrawWindow, "ChillChat · " + _settings.LlmModel.Value);
+            DrawDialogueBox();
+            if (_logOpen) DrawLogWindow();
         }
 
         private void Toggle()
@@ -158,43 +161,125 @@ namespace ChillChat
             _log.LogInfo("ChillChat F9 toggled, visible=" + _visible);
         }
 
-        private void DrawWindow(int id)
+        /// <summary>VN-style bottom dialogue box that blends with the game's own UI.</summary>
+        private void DrawDialogueBox()
         {
-            GUILayout.Space(4);
+            var width = Mathf.Min(Screen.width * 0.86f, 900f);
+            var height = _logOpen ? 150f : 190f;
+            var box = new Rect((Screen.width - width) / 2f, Screen.height - height - 18f, width, height);
+            var panel = new GUIStyle(GUI.skin.box);
+            panel.normal.background = SolidTex(new Color(0.07f, 0.08f, 0.13f, 0.9f));
+            GUI.Box(box, GUIContent.none, panel);
 
-            _scroll = GUILayout.BeginScrollView(_scroll, false, true, GUILayout.ExpandHeight(true));
-            foreach (var turn in _history)
+            // Name plate
+            var plateRect = new Rect(box.x + 14f, box.y - 15f, 150f, 30f);
+            var plate = new GUIStyle(GUI.skin.box);
+            plate.normal.background = SolidTex(new Color(0.97f, 0.68f, 0.48f, 0.95f));
+            GUI.Box(plateRect, GUIContent.none, plate);
+            var plateLabel = new GUIStyle(GUI.skin.label)
             {
-                var isUser = turn[0] == "user";
-                var style = new GUIStyle(GUI.skin.label) { wordWrap = true, richText = true, fontSize = 13 };
-                var name = isUser ? "<color=#f7ad7b>你</color>" : "<color=#8fd8c8>她</color>";
-                GUILayout.Label(name + "  " + turn[1].Replace("\n", " "), style);
-                GUILayout.Space(6);
-            }
+                alignment = TextAnchor.MiddleCenter,
+                fontSize = 14,
+                fontStyle = UnityEngine.FontStyle.Bold,
+            };
+            plateLabel.normal.textColor = new Color(0.16f, 0.12f, 0.1f);
+            GUI.Label(new Rect(plateRect.x, plateRect.y + 2f, plateRect.width, plateRect.height), _settings.CharacterName.Value, plateLabel);
+
+            GUILayout.BeginArea(new Rect(box.x + 14f, box.y + 22f, box.width - 28f, box.height - 36f));
+
+            // Latest dialogue line (or typing indicator)
+            var lineStyle = new GUIStyle(GUI.skin.label) { wordWrap = true, richText = true, fontSize = 15 };
+            lineStyle.normal.textColor = new Color(0.94f, 0.94f, 0.98f);
+            var lastReply = FindLast(_history, t => t[0] == "assistant");
+            var lastUser = FindLast(_history, t => t[0] == "user");
             if (_busy)
             {
-                var busyStyle = new GUIStyle(GUI.skin.label) { fontSize = 12 };
-                busyStyle.normal.textColor = new Color(0.85f, 0.75f, 0.6f);
-                GUILayout.Label("…" + _status, busyStyle);
+                GUILayout.Label("…" + _status, lineStyle, GUILayout.Height(66f));
             }
-            GUILayout.EndScrollView();
+            else if (lastReply != null)
+            {
+                GUILayout.Label(lastReply[1], lineStyle, GUILayout.Height(66f));
+            }
+            else
+            {
+                var hint = new GUIStyle(lineStyle);
+                hint.normal.textColor = new Color(0.62f, 0.66f, 0.78f);
+                GUILayout.Label("（在这里和她说说话。F9 关闭窗口）", hint, GUILayout.Height(66f));
+            }
 
-            GUILayout.Space(6);
-            GUI.SetNextControlName("ChillChatInput");
-            _input = GUILayout.TextField(_input, GUILayout.Height(34));
-            GUI.FocusControl("ChillChatInput");
-
+            GUILayout.Space(4);
             GUILayout.BeginHorizontal();
+            GUI.SetNextControlName("ChillChatInput");
+            _input = GUILayout.TextField(_input, GUILayout.Height(30f));
+            GUI.FocusControl("ChillChatInput");
             var sendStyle = new GUIStyle(GUI.skin.button) { fontSize = 13, fontStyle = UnityEngine.FontStyle.Bold };
-            if (GUILayout.Button(_busy ? "思考中…" : "发送", sendStyle, GUILayout.Width(90), GUILayout.Height(30)))
+            if (GUILayout.Button(_busy ? "…" : "发送", sendStyle, GUILayout.Width(72f), GUILayout.Height(30f)))
             {
                 SendCurrent();
             }
-            GUILayout.FlexibleSpace();
-            GUILayout.Label(_busy ? "" : _status, new GUIStyle(GUI.skin.label) { fontSize = 10 });
+            if (GUILayout.Button(_logOpen ? "收起" : "记录", new GUIStyle(GUI.skin.button) { fontSize = 11 }, GUILayout.Width(52f), GUILayout.Height(30f)))
+            {
+                _logOpen = !_logOpen;
+            }
             GUILayout.EndHorizontal();
+            GUILayout.EndArea();
 
-            GUI.DragWindow(new Rect(0, 0, 10000, 20));
+            if (lastUser != null && lastReply != null && ReferenceEquals(lastUser, FindLast(_history, t => t[0] == "user")))
+            {
+                // keep the player's own line visible as a subtle status under the name plate
+                var who = new GUIStyle(GUI.skin.label) { fontSize = 10 };
+                who.normal.textColor = new Color(0.6f, 0.64f, 0.76f);
+                GUI.Label(new Rect(box.x + box.width - 320f, box.y - 14f, 300f, 18f), "你：" + Shorten(lastUser[1], 36), who);
+            }
+        }
+
+        /// <summary>Scrollable history window, positioned above the dialogue box.</summary>
+        private void DrawLogWindow()
+        {
+            var width = Mathf.Min(Screen.width * 0.86f, 900f);
+            var rect = new Rect((Screen.width - width) / 2f, Screen.height - 150f - 18f - 240f, width, 240f);
+            var panel = new GUIStyle(GUI.skin.box);
+            panel.normal.background = SolidTex(new Color(0.07f, 0.08f, 0.13f, 0.88f));
+            GUI.Box(rect, GUIContent.none, panel);
+            GUILayout.BeginArea(new Rect(rect.x + 12f, rect.y + 10f, rect.width - 24f, rect.height - 20f));
+            _scroll = GUILayout.BeginScrollView(_scroll);
+            foreach (var turn in _history)
+            {
+                var style = new GUIStyle(GUI.skin.label) { wordWrap = true, richText = true, fontSize = 12 };
+                var name = turn[0] == "user" ? "<color=#f7ad7b>你</color>" : "<color=#8fd8c8>" + _settings.CharacterName.Value + "</color>";
+                GUILayout.Label(name + "  " + turn[1].Replace("\n", " "), style);
+            }
+            GUILayout.EndScrollView();
+            GUILayout.EndArea();
+        }
+
+        private static string[] FindLast(List<string[]> history, Func<string[], bool> match)
+        {
+            for (var i = history.Count - 1; i >= 0; i--)
+            {
+                if (match(history[i])) return history[i];
+            }
+            return null;
+        }
+
+        private static Texture2D _solidTex;
+
+        private static Texture2D SolidTex(Color color)
+        {
+            if (_solidTex == null)
+            {
+                _solidTex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+                var pixels = new Color[16];
+                for (var i = 0; i < pixels.Length; i++) pixels[i] = Color.white;
+                _solidTex.SetPixels(pixels);
+                _solidTex.Apply();
+            }
+            var tex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+            var px = new Color[16];
+            for (var i = 0; i < px.Length; i++) px[i] = color;
+            tex.SetPixels(px);
+            tex.Apply();
+            return tex;
         }
 
         private void SendCurrent()
