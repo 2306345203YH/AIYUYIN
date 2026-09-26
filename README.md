@@ -143,7 +143,7 @@ GPT-SoVITS 还需要 NLTK 的英文分词资源。迁移到新电脑后执行一
 .\.venv\Scripts\python.exe -c "import nltk; nltk.download('averaged_perceptron_tagger_eng')"
 ```
 
-网页完整设计、角色数据关系和替换 CosyVoice3/IndexTTS2 的路线见 [docs/web_voice_chat_plan.md](docs/web_voice_chat_plan.md)。
+网页完整设计、角色数据关系和替换 CosyVoice3/IndexTTS2 的路线见 [docs/web_voice_chat_plan.md](docs/web_voice_chat_plan.md)。游戏内 AI 语音对话（《Chill with You Lo-Fi Story》BepInEx 插件）见 [docs/game_mod.md](docs/game_mod.md)。
 
 ## 首次安装或迁移到另一台电脑
 

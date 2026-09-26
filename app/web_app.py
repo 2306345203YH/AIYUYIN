@@ -26,7 +26,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -37,6 +37,7 @@ DATA_ROOT = PROJECT_ROOT / "data" / "chat"
 OUTPUT_ROOT = PROJECT_ROOT / "outputs"
 CHAT_OUTPUT_ROOT = OUTPUT_ROOT / "chat"
 MMD_ROOT = PROJECT_ROOT / "data" / "mmd"
+TTS_OUTPUT_ROOT = OUTPUT_ROOT / "tts"
 DB_PATH = DATA_ROOT / "chat.db"
 VOICE_CONFIG_PATH = PROJECT_ROOT / "config" / "voices.yaml"
 WEB_DIST = PROJECT_ROOT / "web" / "dist"
@@ -914,6 +915,56 @@ async def list_mmd_motions() -> list[dict[str, Any]]:
     for path in sorted(motions_dir.rglob("*.vmd")):
         motions.append({"id": path.stem, "name": path.stem, "file": f"/mmd/{path.relative_to(MMD_ROOT).as_posix()}"})
     return motions
+
+
+TTS_TEXT_LIMIT = 500
+
+
+def _prune_tts_outputs(keep: int = 60) -> None:
+    try:
+        wavs = sorted(TTS_OUTPUT_ROOT.glob("*.wav"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for stale in wavs[keep:]:
+            stale.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+@app.get("/api/tts")
+async def tts_speak(
+    text: str = Query(min_length=1, max_length=TTS_TEXT_LIMIT),
+    voice: str = Query(default="aiyafala"),
+) -> FileResponse:
+    """Standalone GPT-SoVITS synthesis for external clients (e.g. the game mod)."""
+    from .voice_clone import generate_tts_audio, load_voice_profile
+
+    if not text.strip():
+        raise HTTPException(400, "文本为空")
+    try:
+        profile = load_voice_profile(voice)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    TTS_OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+    output = TTS_OUTPUT_ROOT / f"tts_{uuid.uuid4().hex}.wav"
+    try:
+        await asyncio.to_thread(
+            generate_tts_audio,
+            profile["gpt_model"],
+            profile["sovits_model"],
+            profile["bert_model"],
+            profile["cnhubert_model"],
+            profile["reference_audio"],
+            profile["prompt_text"],
+            text.strip(),
+            output,
+            "auto",
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(500, str(exc)) from exc
+    except Exception as exc:  # engine failures surface as a clean message
+        raise HTTPException(500, f"语音合成失败：{exc}") from exc
+    _prune_tts_outputs()
+    return FileResponse(output, media_type="audio/wav", filename="speech.wav")
 
 
 @app.get("/api/health")

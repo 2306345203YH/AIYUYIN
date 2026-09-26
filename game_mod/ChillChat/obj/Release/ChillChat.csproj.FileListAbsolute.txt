@@ -1,0 +1,10 @@
+D:\AIyuyin\game_mod\ChillChat\obj\Release\ChillChat.csproj.AssemblyReference.cache
+D:\AIyuyin\game_mod\ChillChat\obj\Release\ChillChat.GeneratedMSBuildEditorConfig.editorconfig
+D:\AIyuyin\game_mod\ChillChat\obj\Release\ChillChat.AssemblyInfoInputs.cache
+D:\AIyuyin\game_mod\ChillChat\obj\Release\ChillChat.AssemblyInfo.cs
+D:\AIyuyin\game_mod\ChillChat\obj\Release\ChillChat.csproj.CoreCompileInputs.cache
+D:\AIyuyin\game_mod\ChillChat\obj\Release\ChillChat.sourcelink.json
+D:\AIyuyin\game_mod\ChillChat\bin\Release\ChillChat.dll
+D:\AIyuyin\game_mod\ChillChat\bin\Release\ChillChat.pdb
+D:\AIyuyin\game_mod\ChillChat\obj\Release\ChillChat.dll
+D:\AIyuyin\game_mod\ChillChat\obj\Release\ChillChat.pdb
