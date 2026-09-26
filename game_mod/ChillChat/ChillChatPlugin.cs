@@ -27,7 +27,7 @@ namespace ChillChat
     {
         public const string PluginGuid = "aiyuyin.chillchat";
         public const string PluginName = "ChillChat";
-        public const string PluginVersion = "1.0.1";
+        public const string PluginVersion = "1.0.2";
 
         private void Awake()
         {
@@ -93,6 +93,7 @@ namespace ChillChat
         private AudioSource _voiceSource;
         private float _lastToggleAt;
         private bool _loggedFirstUpdate;
+        private const string PluginDriverVersion = "1.0.2";
 
         public void Initialize(ChillSettings settings, ManualLogSource log)
         {
@@ -103,11 +104,21 @@ namespace ChillChat
 
         private void Awake()
         {
-            var go = new GameObject("ChillChatVoiceSource");
-            if (transform.parent != null) go.transform.SetParent(transform, false);
-            UnityEngine.Object.DontDestroyOnLoad(go);
-            _voiceSource = go.AddComponent<AudioSource>();
-            _voiceSource.playOnAwake = false;
+            // The voice source lives on this driver itself and is (re)created lazily in
+            // PlayTts: the game's anti-tamper wipes foreign AudioSources on separate
+            // child objects, but this driver demonstrably survives.
+        }
+
+        private AudioSource EnsureVoiceSource()
+        {
+            if (_voiceSource == null)
+            {
+                _voiceSource = gameObject.AddComponent<AudioSource>();
+                _voiceSource.playOnAwake = false;
+                _voiceSource.spatialBlend = 0f;
+                _voiceSource.volume = 1f;
+            }
+            return _voiceSource;
         }
 
         private IEnumerator Start()
@@ -165,7 +176,7 @@ namespace ChillChat
         private void DrawDialogueBox()
         {
             var width = Mathf.Min(Screen.width * 0.86f, 900f);
-            var height = _logOpen ? 150f : 190f;
+            var height = _logOpen ? 168f : 208f;
             var box = new Rect((Screen.width - width) / 2f, Screen.height - height - 18f, width, height);
             var panel = new GUIStyle(GUI.skin.box);
             panel.normal.background = SolidTex(new Color(0.07f, 0.08f, 0.13f, 0.9f));
@@ -222,6 +233,10 @@ namespace ChillChat
                 _logOpen = !_logOpen;
             }
             GUILayout.EndHorizontal();
+
+            var statusStyle = new GUIStyle(GUI.skin.label) { fontSize = 10 };
+            statusStyle.normal.textColor = new Color(0.62f, 0.66f, 0.78f);
+            GUILayout.Label(_status, statusStyle, GUILayout.Height(14f));
             GUILayout.EndArea();
 
             if (lastUser != null && lastReply != null && ReferenceEquals(lastUser, FindLast(_history, t => t[0] == "user")))
@@ -407,12 +422,17 @@ namespace ChillChat
                 if (clip == null)
                 {
                     _status = "语音解码失败";
+                    _log.LogWarning("TTS clip null");
                     yield break;
                 }
-                _voiceSource.Stop();
-                _voiceSource.clip = clip;
-                _voiceSource.Play();
+                var source = EnsureVoiceSource();
+                source.Stop();
+                source.clip = clip;
+                source.Play();
                 _status = "♪ 正在说话";
+                _log.LogInfo(string.Format("TTS playing: {0:0.0}s ch={1} {2}Hz", clip.length, clip.channels, clip.frequency));
+                yield return new WaitForSeconds(0.3f);
+                _log.LogInfo("TTS isPlaying=" + source.isPlaying + " time=" + source.time.ToString("0.0"));
             }
         }
 

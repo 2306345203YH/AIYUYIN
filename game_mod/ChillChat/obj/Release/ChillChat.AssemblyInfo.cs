@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ChillChat")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+48d0c4421c19237d33d22b31b49e75a48451cd88")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f7a65ec93b290ec1b65089d39cdf497e7c73c1b7")]
 [assembly: System.Reflection.AssemblyProductAttribute("ChillChat")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ChillChat")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
