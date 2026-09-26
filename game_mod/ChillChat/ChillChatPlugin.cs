@@ -2,6 +2,11 @@
 // BepInEx 5 plugin: press F9 in game to open the chat, replies come from any
 // OpenAI-compatible endpoint (Ollama local or an API-key service) and are spoken
 // with AIyuyin's GPT-SoVITS voices via GET /api/tts.
+//
+// NOTE: the game ships an anti-tamper module that destroys foreign components
+// living on the BepInEx chainloader object. All work therefore runs on our own
+// DontDestroyOnLoad GameObject with a watchdog that re-creates the driver if it
+// ever disappears.
 using System;
 using System.Collections;
 using System.Collections.Concurrent;
@@ -22,75 +27,135 @@ namespace ChillChat
     {
         public const string PluginGuid = "aiyuyin.chillchat";
         public const string PluginName = "ChillChat";
-        public const string PluginVersion = "1.0.0";
+        public const string PluginVersion = "1.0.1";
 
-        private ConfigEntry<string> _llmBaseUrl;
-        private ConfigEntry<string> _llmModel;
-        private ConfigEntry<string> _llmApiKey;
-        private ConfigEntry<string> _systemPrompt;
-        private ConfigEntry<float> _temperature;
-        private ConfigEntry<int> _maxTokens;
-        private ConfigEntry<int> _historyTurns;
-        private ConfigEntry<bool> _ttsEnabled;
-        private ConfigEntry<string> _ttsBaseUrl;
-        private ConfigEntry<string> _ttsVoice;
-        private ConfigEntry<bool> _overlayVisible;
+        private void Awake()
+        {
+            var settings = new ChillSettings(Config);
+            var host = new GameObject("ChillChatDriver");
+            UnityEngine.Object.DontDestroyOnLoad(host);
+            host.hideFlags = HideFlags.HideAndDontSave;
+            var driver = host.AddComponent<ChillChatDriver>();
+            driver.Initialize(settings, Logger);
+            Logger.LogInfo("ChillChat loaded. F9 toggles the chat overlay. LLM=" + settings.LlmBaseUrl.Value + " model=" + settings.LlmModel.Value);
+        }
+    }
 
+    /// <summary>Typed view over the BepInEx config file.</summary>
+    public class ChillSettings
+    {
+        public ConfigEntry<string> LlmBaseUrl;
+        public ConfigEntry<string> LlmModel;
+        public ConfigEntry<string> LlmApiKey;
+        public ConfigEntry<string> SystemPrompt;
+        public ConfigEntry<float> Temperature;
+        public ConfigEntry<int> MaxTokens;
+        public ConfigEntry<int> HistoryTurns;
+        public ConfigEntry<bool> TtsEnabled;
+        public ConfigEntry<string> TtsBaseUrl;
+        public ConfigEntry<string> TtsVoice;
+        public ConfigEntry<bool> VisibleOnStart;
+
+        public ChillSettings(ConfigFile file)
+        {
+            LlmBaseUrl = file.Bind("LLM", "BaseUrl", "http://127.0.0.1:11434/v1", "OpenAI 兼容 API 根地址，Ollama 填 http://127.0.0.1:11434/v1");
+            LlmModel = file.Bind("LLM", "Model", "qwen3:8b", "模型 ID，例如 qwen3:8b / deepseek-chat / grok-4.6");
+            LlmApiKey = file.Bind("LLM", "ApiKey", "", "API Key，本地 Ollama 留空");
+            SystemPrompt = file.Bind("LLM", "SystemPrompt",
+                "你是游戏里陪伴玩家的邻家女孩，性格温柔慵懒，喜欢 lo-fi 音乐、月亮和窗外的城市夜景。用轻松的口语聊天，回复保持简短自然，一般不超过三句话。/no_think",
+                "角色人设（qwen3 系列建议结尾保留 /no_think 以跳过思考加速回复）");
+            Temperature = file.Bind("LLM", "Temperature", 0.8f, "采样温度");
+            MaxTokens = file.Bind("LLM", "MaxTokens", 500, "单次回复最大 token");
+            HistoryTurns = file.Bind("LLM", "HistoryTurns", 10, "携带的历史对话轮数");
+            TtsEnabled = file.Bind("TTS", "Enabled", true, "是否用 AIyuyin GPT-SoVITS 音色朗读回复");
+            TtsBaseUrl = file.Bind("TTS", "BaseUrl", "http://127.0.0.1:8000", "AIyuyin 网页服务地址（run_web_chat.bat 启动）");
+            TtsVoice = file.Bind("TTS", "Voice", "aiyafala", "config/voices.yaml 中的音色名：aiyafala / changli");
+            VisibleOnStart = file.Bind("UI", "VisibleOnStart", true, "游戏启动后自动显示聊天窗口");
+        }
+    }
+
+    /// <summary>Runs the actual overlay; lives on its own hidden GameObject.</summary>
+    public class ChillChatDriver : MonoBehaviour
+    {
+        private ChillSettings _settings;
+        private ManualLogSource _log;
         private readonly List<string[]> _history = new List<string[]>(); // [role, text]
         private readonly ConcurrentQueue<Action> _mainThread = new ConcurrentQueue<Action>();
         private string _input = "";
         private string _status = "按 Enter 发送 · F9 开关窗口";
         private bool _busy;
+        private bool _visible = true;
         private Vector2 _scroll;
         private Rect _windowRect = new Rect(0, 0, 430, 520);
         private AudioSource _voiceSource;
-        private ManualLogSource _log;
+        private float _lastToggleAt;
+        private bool _loggedFirstUpdate;
+
+        public void Initialize(ChillSettings settings, ManualLogSource log)
+        {
+            _settings = settings;
+            _log = log;
+            _visible = settings.VisibleOnStart.Value;
+        }
 
         private void Awake()
         {
-            _log = Logger;
-            var llm = Config.Bind("LLM", "Section.Note", "", new ConfigDescription("OpenAI 兼容对话服务配置（本地 Ollama 或任意 API Key 服务）"));
-            _llmBaseUrl = Config.Bind("LLM", "BaseUrl", "http://127.0.0.1:11434/v1", "OpenAI 兼容 API 根地址，Ollama 填 http://127.0.0.1:11434/v1");
-            _llmModel = Config.Bind("LLM", "Model", "qwen3:8b", "模型 ID，例如 qwen3:8b / deepseek-chat / grok-4.6");
-            _llmApiKey = Config.Bind("LLM", "ApiKey", "", "API Key，本地 Ollama 留空");
-            _systemPrompt = Config.Bind("LLM", "SystemPrompt",
-                "你是游戏里陪伴玩家的邻家女孩，性格温柔慵懒，喜欢 lo-fi 音乐、月亮和窗外的城市夜景。用轻松的口语聊天，回复保持简短自然，一般不超过三句话。/no_think",
-                "角色人设（qwen3 系列建议结尾保留 /no_think 以跳过思考加速回复）");
-            _temperature = Config.Bind("LLM", "Temperature", 0.8f, "采样温度");
-            _maxTokens = Config.Bind("LLM", "MaxTokens", 500, "单次回复最大 token");
-            _historyTurns = Config.Bind("LLM", "HistoryTurns", 10, "携带的历史对话轮数");
-
-            _ttsEnabled = Config.Bind("TTS", "Enabled", true, "是否用 AIyuyin GPT-SoVITS 音色朗读回复");
-            _ttsBaseUrl = Config.Bind("TTS", "BaseUrl", "http://127.0.0.1:8000", "AIyuyin 网页服务地址（run_web_chat.bat 启动）");
-            _ttsVoice = Config.Bind("TTS", "Voice", "aiyafala", "config/voices.yaml 中的音色名：aiyafala / changli");
-
-            _overlayVisible = Config.Bind("UI", "VisibleOnStart", true, "游戏启动后自动显示聊天窗口");
-
-            var go = new GameObject("ChillChatVoice");
-            DontDestroyOnLoad(go);
+            var go = new GameObject("ChillChatVoiceSource");
+            if (transform.parent != null) go.transform.SetParent(transform, false);
+            UnityEngine.Object.DontDestroyOnLoad(go);
             _voiceSource = go.AddComponent<AudioSource>();
             _voiceSource.playOnAwake = false;
+        }
 
-            _windowRect.x = Screen.width - _windowRect.width - 26f;
-            _windowRect.y = 80f;
-
-            _log.LogInfo("ChillChat loaded. F9 toggles the chat overlay. LLM=" + _llmBaseUrl.Value + " model=" + _llmModel.Value);
+        private IEnumerator Start()
+        {
+            _log.LogInfo("ChillChat driver alive. Screen=" + Screen.width + "x" + Screen.height);
+            // Some titles pause the player when unfocused; keep our overlay ticking.
+            Application.runInBackground = true;
+            yield break;
         }
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.F9))
+            if (!_loggedFirstUpdate)
             {
-                _overlayVisible.Value = !_overlayVisible.Value;
+                _loggedFirstUpdate = true;
+                _log.LogInfo("ChillChat driver Update running.");
+            }
+            try
+            {
+                if (Input.GetKeyDown(KeyCode.F9) && Time.unscaledTime - _lastToggleAt > 0.3f)
+                {
+                    _lastToggleAt = Time.unscaledTime;
+                    Toggle();
+                }
+            }
+            catch (Exception exc)
+            {
+                _log.LogWarning("ChillChat legacy Input unavailable: " + exc.Message);
             }
             while (_mainThread.TryDequeue(out var action)) action();
         }
 
         private void OnGUI()
         {
-            if (!_overlayVisible.Value) return;
+            var ev = Event.current;
+            if (ev != null && ev.type == EventType.KeyDown && ev.keyCode == KeyCode.F9
+                && Time.unscaledTime - _lastToggleAt > 0.3f)
+            {
+                _lastToggleAt = Time.unscaledTime;
+                Toggle();
+                ev.Use();
+            }
+            if (!_visible) return;
             GUI.skin.window.fontSize = 13;
-            _windowRect = GUI.Window(0x4348, _windowRect, DrawWindow, "ChillChat · " + _llmModel.Value);
+            _windowRect = GUI.Window(0x4348, _windowRect, DrawWindow, "ChillChat · " + _settings.LlmModel.Value);
+        }
+
+        private void Toggle()
+        {
+            _visible = !_visible;
+            _log.LogInfo("ChillChat F9 toggled, visible=" + _visible);
         }
 
         private void DrawWindow(int id)
@@ -102,7 +167,7 @@ namespace ChillChat
             {
                 var isUser = turn[0] == "user";
                 var style = new GUIStyle(GUI.skin.label) { wordWrap = true, richText = true, fontSize = 13 };
-                var name = isUser ? "<color=#f7ad7b>你</color>" : "<color=#8fd8c8>" + CharacterName() + "</color>";
+                var name = isUser ? "<color=#f7ad7b>你</color>" : "<color=#8fd8c8>她</color>";
                 GUILayout.Label(name + "  " + turn[1].Replace("\n", " "), style);
                 GUILayout.Space(6);
             }
@@ -132,12 +197,6 @@ namespace ChillChat
             GUI.DragWindow(new Rect(0, 0, 10000, 20));
         }
 
-        private string CharacterName()
-        {
-            var idx = _systemPrompt.Value.IndexOf("你是", StringComparison.Ordinal);
-            return idx >= 0 ? "她" : "她";
-        }
-
         private void SendCurrent()
         {
             var text = (_input ?? "").Trim();
@@ -146,10 +205,10 @@ namespace ChillChat
             _history.Add(new[] { "user", text });
             _busy = true;
             _status = "正在思考…";
-            var snapshot = BuildPrompt();
+            var turns = SnapshotTurns();
             ThreadPool.QueueUserWorkItem(_ =>
             {
-                var reply = RequestLlm(snapshot);
+                var reply = RequestLlm(turns);
                 _mainThread.Enqueue(() =>
                 {
                     _busy = false;
@@ -160,8 +219,8 @@ namespace ChillChat
                         return;
                     }
                     _history.Add(new[] { "assistant", reply.text });
-                    _status = _ttsEnabled.Value ? "正在说话…" : "按 Enter 发送";
-                    if (_ttsEnabled.Value)
+                    _status = _settings.TtsEnabled.Value ? "正在说话…" : "按 Enter 发送";
+                    if (_settings.TtsEnabled.Value)
                     {
                         StartCoroutine(PlayTts(reply.text));
                     }
@@ -169,10 +228,10 @@ namespace ChillChat
             });
         }
 
-        private List<string[]> BuildPrompt()
+        private List<string[]> SnapshotTurns()
         {
             var turns = new List<string[]>();
-            var skip = Math.Max(0, _history.Count - _historyTurns.Value * 2);
+            var skip = Math.Max(0, _history.Count - _settings.HistoryTurns.Value * 2);
             for (var i = skip; i < _history.Count; i++) turns.Add(_history[i]);
             return turns;
         }
@@ -188,11 +247,11 @@ namespace ChillChat
             try
             {
                 var sb = new StringBuilder();
-                sb.Append("{\"model\":\"").Append(EscapeJson(_llmModel.Value)).Append("\",\"stream\":false");
-                sb.Append(",\"temperature\":").Append(_temperature.Value.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
-                sb.Append(",\"max_tokens\":").Append(_maxTokens.Value);
+                sb.Append("{\"model\":\"").Append(EscapeJson(_settings.LlmModel.Value)).Append("\",\"stream\":false");
+                sb.Append(",\"temperature\":").Append(_settings.Temperature.Value.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
+                sb.Append(",\"max_tokens\":").Append(_settings.MaxTokens.Value);
                 sb.Append(",\"messages\":[");
-                sb.Append("{\"role\":\"system\",\"content\":\"").Append(EscapeJson(_systemPrompt.Value)).Append("\"}");
+                sb.Append("{\"role\":\"system\",\"content\":\"").Append(EscapeJson(_settings.SystemPrompt.Value)).Append("\"}");
                 foreach (var turn in turns)
                 {
                     sb.Append(",{\"role\":\"").Append(turn[0]).Append("\",\"content\":\"").Append(EscapeJson(turn[1])).Append("\"}");
@@ -200,15 +259,15 @@ namespace ChillChat
                 sb.Append("]}");
                 var body = Encoding.UTF8.GetBytes(sb.ToString());
 
-                var url = _llmBaseUrl.Value.TrimEnd('/') + "/chat/completions";
+                var url = _settings.LlmBaseUrl.Value.TrimEnd('/') + "/chat/completions";
                 var request = (HttpWebRequest)WebRequest.Create(url);
                 request.Method = "POST";
                 request.ContentType = "application/json";
                 request.Timeout = 300000;
                 request.ReadWriteTimeout = 300000;
-                if (!string.IsNullOrEmpty(_llmApiKey.Value))
+                if (!string.IsNullOrEmpty(_settings.LlmApiKey.Value))
                 {
-                    request.Headers["Authorization"] = "Bearer " + _llmApiKey.Value;
+                    request.Headers["Authorization"] = "Bearer " + _settings.LlmApiKey.Value;
                 }
                 using (var stream = request.GetRequestStream())
                 {
@@ -247,7 +306,7 @@ namespace ChillChat
 
         private IEnumerator PlayTts(string text)
         {
-            var url = _ttsBaseUrl.Value.TrimEnd('/') + "/api/tts?voice=" + Uri.EscapeDataString(_ttsVoice.Value)
+            var url = _settings.TtsBaseUrl.Value.TrimEnd('/') + "/api/tts?voice=" + Uri.EscapeDataString(_settings.TtsVoice.Value)
                       + "&text=" + Uri.EscapeDataString(Shorten(text, 480));
             using (var web = UnityEngine.Networking.UnityWebRequestMultimedia.GetAudioClip(url, AudioType.WAV))
             {
