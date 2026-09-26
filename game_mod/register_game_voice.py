@@ -12,8 +12,19 @@ VOICE = "alterego"
 
 
 def main() -> None:
-    sovits = sorted((PKG_ROOT / "SoVITS_weights_v2").glob(f"{VOICE}_*.pth"))
-    gpt = sorted((PKG_ROOT / "GPT_weights_v2").glob(f"{VOICE}*.ckpt"))
+    import re
+
+    def highest(paths, pattern):
+        best, best_epoch = None, -1
+        for path in paths:
+            m = re.search(r"e(\d+)", path.stem)
+            epoch = int(m.group(1)) if m else -1
+            if epoch >= best_epoch:
+                best, best_epoch = path, epoch
+        return best
+
+    sovits = [highest((PKG_ROOT / "SoVITS_weights_v2").glob(f"{VOICE}_*.pth"), "e")]
+    gpt = [highest((PKG_ROOT / "GPT_weights_v2").glob(f"{VOICE}*.ckpt"), "e")]
     if not sovits or not gpt:
         raise SystemExit(f"weights not found: {len(sovits)} sovits, {len(gpt)} gpt")
     sovits_path = (sovits[-1]).relative_to(AIYUYIN_ROOT).as_posix()

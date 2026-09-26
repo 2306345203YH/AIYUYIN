@@ -6,7 +6,6 @@ voices:
     cnhubert_model: models/gpt_sovits/chinese-hubert-base
     reference_audio: data/voices/aiyafala/aiyafala_021.wav
     prompt_text: 野餐就要开始啦。
-
   changli:
     gpt_model: models/voices/changli/changli.ckpt
     sovits_model: models/voices/changli/changli.pth
@@ -14,3 +13,12 @@ voices:
     cnhubert_model: models/gpt_sovits/chinese-hubert-base
     reference_audio: data/voices/changli/changli_004.wav
     prompt_text: 而我只是一个有幸接过游丝的引路人，是助你串联起过去与未来的契机。
+  alterego:
+    gpt_model: third_party/GPT-SoVITS-v2pro/GPT-SoVITS-v2pro-20250604/GPT_weights_v2/alterego-e12.ckpt
+    sovits_model: third_party/GPT-SoVITS-v2pro/GPT-SoVITS-v2pro-20250604/SoVITS_weights_v2/alterego_e10_s1510.pth
+    bert_model: models/gpt_sovits/chinese-roberta-wwm-ext-large
+    cnhubert_model: models/gpt_sovits/chinese-hubert-base
+    reference_audio: data/voices/game_girl/raw/Voice_MainScenario_27_016.wav
+    prompt_text: 君が集中した時のシータ波を検出して、リンクを繋ぎ直せば元通りになるはず。
+    text_lang: all_zh
+    prompt_lang: ja

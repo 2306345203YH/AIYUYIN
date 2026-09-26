@@ -30,7 +30,7 @@ CNHUBERT_DIR = PRETRAINED / "chinese-hubert-base"
 SV_CKPT = PRETRAINED / "sv" / "pretrained_eres2netv2w24s4ep4.ckpt"
 S2G_PRETRAINED = PRETRAINED / "gsv-v2final-pretrained" / "s2G2333k.pth"
 S2D_PRETRAINED = PRETRAINED / "gsv-v2final-pretrained" / "s2D2333k.pth"
-S1_PRETRAINED = PRETRAINED / "s1bert25hz-2kh-longer-epoch=68e-step=50232.ckpt"
+S1_PRETRAINED = PRETRAINED / "gsv-v2final-pretrained" / "s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt"
 PYTHON = PKG_ROOT / "runtime" / "python.exe"
 
 
@@ -110,30 +110,34 @@ def main() -> None:
     inp_text, _ = build_filelist()
     opt_dir = PKG_ROOT / "logs" / EXP_NAME
     opt_dir.mkdir(parents=True, exist_ok=True)
+    prep_done = (opt_dir / "2-name2text.txt").exists() and (opt_dir / "6-name2semantic.tsv").exists()
+    if prep_done:
+        print("preprocessing outputs already present, skipping 1a/1b/1c")
     tmp_dir = PKG_ROOT / "TEMP"
     tmp_dir.mkdir(exist_ok=True)
     prepared = {"inp_text": str(inp_text), "inp_wav_dir": "", "exp_name": EXP_NAME, "opt_dir": str(opt_dir)}
 
-    # 1a: phonemes + BERT features
-    env = base_env(inp_text, "", opt_dir)
-    env["bert_pretrained_dir"] = str(BERT_DIR)
-    run_stage("1a get-text", [str(PYTHON), "-s", "GPT_SoVITS/prepare_datasets/1-get-text.py"], env, PKG_ROOT)
-    merge_parts(opt_dir, "2-name2text-*.txt", "2-name2text.txt")
+    if not prep_done:
+        # 1a: phonemes + BERT features
+        env = base_env(inp_text, "", opt_dir)
+        env["bert_pretrained_dir"] = str(BERT_DIR)
+        run_stage("1a get-text", [str(PYTHON), "-s", "GPT_SoVITS/prepare_datasets/1-get-text.py"], env, PKG_ROOT)
+        merge_parts(opt_dir, "2-name2text-*.txt", "2-name2text.txt")
 
-    # 1b: CN-HuBERT features + 32k wavs
-    env = base_env(inp_text, "", opt_dir)
-    env["cnhubert_base_dir"] = str(CNHUBERT_DIR)
-    env["sv_path"] = str(SV_CKPT)
-    run_stage("1b hubert+wav32k", [str(PYTHON), "-s", "GPT_SoVITS/prepare_datasets/2-get-hubert-wav32k.py"], env, PKG_ROOT)
+        # 1b: CN-HuBERT features + 32k wavs
+        env = base_env(inp_text, "", opt_dir)
+        env["cnhubert_base_dir"] = str(CNHUBERT_DIR)
+        env["sv_path"] = str(SV_CKPT)
+        run_stage("1b hubert+wav32k", [str(PYTHON), "-s", "GPT_SoVITS/prepare_datasets/2-get-hubert-wav32k.py"], env, PKG_ROOT)
 
-    # (2-get-sv.py is only required for v2Pro/Plus; plain v2 skips it.)
+        # (2-get-sv.py is only required for v2Pro/Plus; plain v2 skips it.)
 
-    # 1c: semantic tokens
-    env = base_env(inp_text, "", opt_dir)
-    env["s2config_path"] = str(PKG_ROOT / "GPT_SoVITS" / "configs" / "s2.json")
-    env["pretrained_s2G"] = str(S2G_PRETRAINED)
-    run_stage("1c semantic", [str(PYTHON), "-s", "GPT_SoVITS/prepare_datasets/3-get-semantic.py"], env, PKG_ROOT)
-    merge_parts(opt_dir, "6-name2semantic-*.tsv", "6-name2semantic.tsv")
+        # 1c: semantic tokens
+        env = base_env(inp_text, "", opt_dir)
+        env["s2config_path"] = str(PKG_ROOT / "GPT_SoVITS" / "configs" / "s2.json")
+        env["pretrained_s2G"] = str(S2G_PRETRAINED)
+        run_stage("1c semantic", [str(PYTHON), "-s", "GPT_SoVITS/prepare_datasets/3-get-semantic.py"], env, PKG_ROOT)
+        merge_parts(opt_dir, "6-name2semantic-*.tsv", "6-name2semantic.tsv")
 
     # 2: SoVITS (s2) fine-tune
     with (PKG_ROOT / "GPT_SoVITS" / "configs" / "s2.json").open(encoding="utf-8") as handle:
@@ -157,6 +161,7 @@ def main() -> None:
     s2_config["save_weight_dir"] = "SoVITS_weights_v2"
     s2_config["name"] = EXP_NAME
     s2_config["version"] = VERSION
+    (opt_dir / f"logs_s2_{VERSION}").mkdir(parents=True, exist_ok=True)
     s2_tmp = tmp_dir / "tmp_s2_alterego.json"
     s2_tmp.write_text(json.dumps(s2_config), encoding="utf-8")
     run_stage("2 s2 SoVITS train", [str(PYTHON), "-s", "GPT_SoVITS/s2_train.py", "--config", str(s2_tmp)], os.environ.copy(), PKG_ROOT)
@@ -182,6 +187,7 @@ def main() -> None:
     s1_config["train_semantic_path"] = str(opt_dir / "6-name2semantic.tsv")
     s1_config["train_phoneme_path"] = str(opt_dir / "2-name2text.txt")
     s1_config["output_dir"] = str(opt_dir / "logs_s1_v2")
+    (opt_dir / "logs_s1_v2").mkdir(parents=True, exist_ok=True)
     s1_tmp = tmp_dir / "tmp_s1_alterego.yaml"
     s1_tmp.write_text(yaml.dump(s1_config, default_flow_style=False, allow_unicode=True), encoding="utf-8")
     env = os.environ.copy()

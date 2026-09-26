@@ -50,6 +50,7 @@ cn2an==0.5.24
 pypinyin==0.55.0
 g2p-en==2.1.0
 g2pM==0.1.2.5
+pyopenjtalk-plus==0.4.1.post9
 opencc-python-reimplemented==0.1.7
 g2pk2==0.0.3
 fast-langdetect==1.0.1
