@@ -80,6 +80,19 @@ def base_env(inp_text: Path, inp_wav_dir: str, opt_dir: Path) -> dict:
     return env
 
 
+def merge_parts(opt_dir: Path, part_pattern: str, merged_name: str) -> None:
+    """The official webui merges per-GPU part outputs after each stage; mirror that."""
+    parts = sorted(opt_dir.glob(part_pattern))
+    lines: list[str] = []
+    for part in parts:
+        text = part.read_text(encoding="utf-8", errors="ignore").strip("\n")
+        if text:
+            lines.extend(text.split("\n"))
+        part.unlink()
+    (opt_dir / merged_name).write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"merged {len(parts)} part files -> {merged_name} ({len(lines)} lines)")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs-s2", type=int, default=10)
@@ -105,6 +118,7 @@ def main() -> None:
     env = base_env(inp_text, "", opt_dir)
     env["bert_pretrained_dir"] = str(BERT_DIR)
     run_stage("1a get-text", [str(PYTHON), "-s", "GPT_SoVITS/prepare_datasets/1-get-text.py"], env, PKG_ROOT)
+    merge_parts(opt_dir, "2-name2text-*.txt", "2-name2text.txt")
 
     # 1b: CN-HuBERT features + 32k wavs
     env = base_env(inp_text, "", opt_dir)
@@ -117,8 +131,9 @@ def main() -> None:
     # 1c: semantic tokens
     env = base_env(inp_text, "", opt_dir)
     env["s2config_path"] = str(PKG_ROOT / "GPT_SoVITS" / "configs" / "s2.json")
-    env["pretrained_s2G_path"] = str(S2G_PRETRAINED)
+    env["pretrained_s2G"] = str(S2G_PRETRAINED)
     run_stage("1c semantic", [str(PYTHON), "-s", "GPT_SoVITS/prepare_datasets/3-get-semantic.py"], env, PKG_ROOT)
+    merge_parts(opt_dir, "6-name2semantic-*.tsv", "6-name2semantic.tsv")
 
     # 2: SoVITS (s2) fine-tune
     with (PKG_ROOT / "GPT_SoVITS" / "configs" / "s2.json").open(encoding="utf-8") as handle:

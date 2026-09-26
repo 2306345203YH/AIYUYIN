@@ -635,6 +635,8 @@ def synthesize_with_gpt_sovits(
         spoken_text,
         output_path,
         os.environ.get("AIYUYIN_TTS_DEVICE", "auto"),
+        text_lang=profile.get("text_lang", "all_zh"),
+        prompt_lang=profile.get("prompt_lang", "all_zh"),
     )
     return output_path, voice_key
 
@@ -958,6 +960,8 @@ async def tts_speak(
             text.strip(),
             output,
             "auto",
+            text_lang=profile.get("text_lang", "all_zh"),
+            prompt_lang=profile.get("prompt_lang", "all_zh"),
         )
     except FileNotFoundError as exc:
         raise HTTPException(500, str(exc)) from exc

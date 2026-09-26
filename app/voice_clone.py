@@ -92,7 +92,7 @@ class VoiceTTSRuntime:
         self.gpt_path = paths["gpt"]
         self.sovits_path = paths["sovits"]
 
-    def run(self, paths: dict[str, Path], prompt_text: str, text: str):
+    def run(self, paths: dict[str, Path], prompt_text: str, text: str, text_lang: str = "all_zh", prompt_lang: str = "all_zh"):
         from TTS_infer_pack.text_segmentation_method import get_method
 
         self.switch_voice(paths)
@@ -103,8 +103,8 @@ class VoiceTTSRuntime:
 
         inputs = {
             "text": "",
-            "text_lang": "all_zh",
-            "prompt_lang": "all_zh",
+            "text_lang": text_lang,
+            "prompt_lang": prompt_lang,
             "ref_audio_path": str(paths["reference"]),
             "prompt_text": prompt_text,
             "text_split_method": "cut0",
@@ -142,6 +142,8 @@ def generate_tts_audio(
     text: str,
     output_path: str | Path,
     device: str = "auto",
+    text_lang: str = "all_zh",
+    prompt_lang: str = "all_zh",
 ) -> Path:
     """Generate one WAV while reusing the resident GPT-SoVITS runtime."""
     import torch
@@ -165,7 +167,7 @@ def generate_tts_audio(
 
     with _RUNTIME_LOCK:
         runtime = _get_runtime(paths, selected_device)
-        sampling_rate, audio_data = runtime.run(paths, prompt_text, text)
+        sampling_rate, audio_data = runtime.run(paths, prompt_text, text, text_lang=text_lang, prompt_lang=prompt_lang)
 
     resolved_output = _project_path(output_path)
     resolved_output.parent.mkdir(parents=True, exist_ok=True)
@@ -194,6 +196,8 @@ def main() -> None:
         args.text,
         args.output,
         args.device,
+        text_lang=profile.get("text_lang", "all_zh"),
+        prompt_lang=profile.get("prompt_lang", "all_zh"),
     )
 
 
